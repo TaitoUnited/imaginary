@@ -11,7 +11,7 @@ Use the release container image on docker-compose.yaml:
 ```
   my-project-imaginary:
     container_name: my-project-imaginary
-    image: taitounited/imaginary:latest
+    image: ghcr.io/taitounited/imaginary:latest
     restart: unless-stopped
     networks:
       - default
