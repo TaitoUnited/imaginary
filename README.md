@@ -11,7 +11,7 @@ Use the release container image on docker-compose.yaml:
 ```
   my-project-imaginary:
     container_name: my-project-imaginary
-    image: taitounited/imaginary:1.0.0
+    image: taitounited/imaginary:latest
     restart: unless-stopped
     networks:
       - default
@@ -26,7 +26,6 @@ Or alternatively refer directly to the imaginary implementation located on your 
     container_name: my-project-imaginary
     build:
       context: ../imaginary/server
-    image: taitounited/imaginary:1.0.0
     restart: unless-stopped
     networks:
       - default
