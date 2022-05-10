@@ -51,7 +51,7 @@ jobs:
         with:
           builder: ${{ steps.buildx.outputs.name }}
           context: .
-          file: ./server/Dockerfile
+          file: ./server/Dockerfile.build
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ghcr.io/taitounited/imaginary:${{ env.VERSION }}
