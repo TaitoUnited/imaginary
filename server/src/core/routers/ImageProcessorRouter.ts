@@ -21,6 +21,9 @@ type Operation = typeof ALLOWED_OPERATIONS[number] extends keyof Sharp
   ? typeof ALLOWED_OPERATIONS[number]
   : never;
 
+const HTTP_METHODS = ['PUT', 'POST'] as const;
+type HttpMethod = typeof HTTP_METHODS[number];
+
 const ALLOWED_FORMATS = ['png', 'jpeg', 'webp'] as const;
 type Format = typeof ALLOWED_FORMATS[number] extends keyof Sharp
   ? typeof ALLOWED_FORMATS[number]
@@ -28,11 +31,34 @@ type Format = typeof ALLOWED_FORMATS[number] extends keyof Sharp
 
 const checkFormat = (f: any): f is Format => ALLOWED_FORMATS.includes(f);
 
+export type Urls = {
+  input: string;
+  output:
+    | string
+    | {
+        url: string;
+        headers: {
+          [key: string]: string;
+        };
+        method: HttpMethod;
+      };
+  format: Format;
+}[];
+
 const UrlsSchema = Joi.array()
   .items(
     Joi.object({
       input: Joi.string().uri().required(),
-      output: Joi.string().uri().required(),
+      output: Joi.alternatives(
+        Joi.string().uri().required(),
+        Joi.object({
+          url: Joi.string().uri().required(),
+          headers: Joi.object().pattern(Joi.string(), Joi.string()),
+          method: Joi.string()
+            .valid(...HTTP_METHODS)
+            .default('PUT'),
+        })
+      ),
       format: Joi.string()
         .valid(...ALLOWED_FORMATS)
         .default('webp'),
@@ -99,38 +125,42 @@ export class ImageProcessingRouter extends BaseRouter {
       handler: [
         bodyParser(),
         async (ctx: Context) => {
-          const { urls, pipeline } = ctx.request.body;
+          const { urls, pipeline } = ctx.request.body as {
+            urls: Urls;
+            pipeline: any;
+          };
 
           const processor = this.createProcessor(pipeline);
 
           await Promise.all(
-            urls.map(
-              async ({
-                input,
-                output,
-                format,
-              }: {
-                input: string;
-                output: string;
-                format: Format;
-              }) => {
-                const { data } = await axios({
-                  method: 'GET',
-                  url: input,
-                  responseType: 'stream',
-                  timeout: 0,
-                });
-                const duplex = new stream.PassThrough();
-                const upload = axios({
-                  method: 'PUT',
-                  url: output,
-                  data: duplex,
-                });
+            urls.map(async ({ input, output, format }) => {
+              const { data } = await axios({
+                method: 'GET',
+                url: input,
+                responseType: 'stream',
+                timeout: 0,
+              });
+              const duplex = new stream.PassThrough();
 
-                data.pipe(processor[format]()).pipe(duplex);
-                await upload;
-              }
-            )
+              const outputUrl =
+                typeof output === 'string' ? output : output.url;
+              const outputHeaders =
+                typeof output === 'string' ? {} : output.headers;
+              const uploadMethod =
+                typeof output === 'string' ? 'PUT' : output.method;
+
+              const upload = axios({
+                method: uploadMethod,
+                url: outputUrl,
+                headers: {
+                  ...outputHeaders,
+                },
+                data: duplex,
+              });
+
+              data.pipe(processor[format]()).pipe(duplex);
+              await upload;
+            })
           );
 
           ctx.status = 200;

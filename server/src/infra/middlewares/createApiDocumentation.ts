@@ -328,6 +328,20 @@ export function schemaToObject(schema: any): any {
     case 'array': {
       return schema.items.map(schemaToObject);
     }
+    case 'alternatives': {
+      return schema.matches
+        .map((cur: any) => {
+          const match = schemaToObject(cur.schema);
+
+          return typeof match === 'string'
+            ? match
+            : JSON.stringify(match, null, 2)
+                .replace(/"/g, "'")
+                .replace(/(\s+)/g, ' ')
+                .replace(/\n/g, ' ');
+        })
+        .join(' | ');
+    }
     default: {
       const presence =
         schema.flags && schema.flags.presence
