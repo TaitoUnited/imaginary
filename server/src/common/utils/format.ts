@@ -112,3 +112,24 @@ function formatter(formatFn: (key: string) => string, obj: any): any {
 export const snakeCase: Formatter = (obj: any) => formatter(toSnakeCase, obj);
 
 export const camelCase: Formatter = (obj: any) => formatter(toCamelCase, obj);
+
+/**
+ * Utility function for replacing variables in a string with values.
+ *
+ * @example
+ * replaceVariables('hello {{user}}', { user: 'world' })
+ */
+export function replaceVariables(str: string, variables: Record<string, any>) {
+  const caseInsensitiveVariables = Object.keys(variables).reduce((obj, cur) => {
+    return {
+      ...obj,
+      [cur.toLowerCase()]: variables[cur],
+    };
+  }, {} as Record<string, any>);
+
+  return str.replace(/\{\{([^}]+)\}\}/g, (prev, key) => {
+    const value = caseInsensitiveVariables[key.toLowerCase()];
+
+    return value === undefined || value === null ? prev : value;
+  });
+}

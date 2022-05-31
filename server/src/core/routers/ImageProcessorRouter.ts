@@ -9,6 +9,7 @@ import axios from 'axios';
 import sharp, { Sharp } from 'sharp';
 import BaseRouter from '../../common/setup/BaseRouter';
 import { schemaToObject } from '../../infra/middlewares/createApiDocumentation';
+import { replaceVariables } from '../../common/utils/format';
 
 const ALLOWED_OPERATIONS = [
   'resize',
@@ -130,17 +131,14 @@ export class ImageProcessingRouter extends BaseRouter {
             pipeline: any;
           };
 
-          const processor = this.createProcessor(pipeline);
-
           await Promise.all(
             urls.map(async ({ input, output, format }) => {
               const { data } = await axios({
                 method: 'GET',
                 url: input,
-                responseType: 'stream',
                 timeout: 0,
+                responseType: 'arraybuffer',
               });
-              const duplex = new stream.PassThrough();
 
               const outputUrl =
                 typeof output === 'string' ? output : output.url;
@@ -149,16 +147,33 @@ export class ImageProcessingRouter extends BaseRouter {
               const uploadMethod =
                 typeof output === 'string' ? 'PUT' : output.method;
 
+              const processor = this.createProcessor(pipeline, sharp(data))[
+                format
+              ]();
+              const outputBuffer = await processor.toBuffer();
+
+              const outputVariables = {
+                OUTPUT_LENGTH: outputBuffer.length,
+              };
+
               const upload = axios({
                 method: uploadMethod,
                 url: outputUrl,
                 headers: {
-                  ...outputHeaders,
+                  ...Object.keys(outputHeaders ?? {}).reduce(
+                    (obj, key) => ({
+                      ...obj,
+                      [key]: replaceVariables(
+                        outputHeaders[key],
+                        outputVariables
+                      ),
+                    }),
+                    {} as Record<string, any>
+                  ),
                 },
-                data: duplex,
+                data: outputBuffer,
               });
 
-              data.pipe(processor[format]()).pipe(duplex);
               await upload;
             })
           );
