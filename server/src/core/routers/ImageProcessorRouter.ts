@@ -1,11 +1,11 @@
 import stream from 'stream';
-import Boom from '@hapi/boom';
+import Boom, { boomify } from '@hapi/boom';
 import { Context } from 'koa';
 import { Joi } from 'koa-joi-router';
 import bodyParser from 'koa-bodyparser';
 import multer from '@koa/multer';
 import { Service } from 'typedi';
-import axios from 'axios';
+import axios, { AxiosPromise } from 'axios';
 import sharp, { Sharp } from 'sharp';
 import BaseRouter from '../../common/setup/BaseRouter';
 import { schemaToObject } from '../../infra/middlewares/createApiDocumentation';
@@ -132,13 +132,30 @@ export class ImageProcessingRouter extends BaseRouter {
           };
 
           await Promise.all(
-            urls.map(async ({ input, output, format }) => {
-              const { data } = await axios({
-                method: 'GET',
-                url: input,
-                timeout: 0,
-                responseType: 'arraybuffer',
-              });
+            urls.map(async ({ input, output, format }, index) => {
+              let data: any;
+
+              try {
+                const res = await axios({
+                  method: 'GET',
+                  url: input,
+                  timeout: 0,
+                  responseType: 'arraybuffer',
+                });
+
+                data = res.data;
+              } catch (e) {
+                if (axios.isAxiosError(e) && e.response) {
+                  // throw HTTP error with the same status code from the target
+                  // not sure what the convention would be in these cases but this kinda makes sense, right?
+                  throw boomify(e, {
+                    statusCode: e.response.status,
+                    message: `Error fetching image from url[${index}] ${input}: ${e.response?.data}`,
+                  });
+                }
+
+                throw e;
+              }
 
               const outputUrl =
                 typeof output === 'string' ? output : output.url;
@@ -156,25 +173,36 @@ export class ImageProcessingRouter extends BaseRouter {
                 OUTPUT_LENGTH: outputBuffer.length,
               };
 
-              const upload = axios({
-                method: uploadMethod,
-                url: outputUrl,
-                headers: {
-                  ...Object.keys(outputHeaders ?? {}).reduce(
-                    (obj, key) => ({
-                      ...obj,
-                      [key]: replaceVariables(
-                        outputHeaders[key],
-                        outputVariables
-                      ),
-                    }),
-                    {} as Record<string, any>
-                  ),
-                },
-                data: outputBuffer,
-              });
+              try {
+                await axios({
+                  method: uploadMethod,
+                  url: outputUrl,
+                  headers: {
+                    ...Object.keys(outputHeaders ?? {}).reduce(
+                      (obj, key) => ({
+                        ...obj,
+                        [key]: replaceVariables(
+                          outputHeaders[key],
+                          outputVariables
+                        ),
+                      }),
+                      {} as Record<string, any>
+                    ),
+                  },
+                  data: outputBuffer,
+                });
+              } catch (e) {
+                if (axios.isAxiosError(e) && e.response) {
+                  throw boomify(e, {
+                    statusCode: e.response.status,
+                    message: `Error uploading image to url[${index}] ${outputUrl}: ${JSON.stringify(
+                      e.response?.data
+                    )}`,
+                  });
+                }
 
-              await upload;
+                throw e;
+              }
             })
           );
 
