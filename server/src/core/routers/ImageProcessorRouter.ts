@@ -6,7 +6,7 @@ import bodyParser from 'koa-bodyparser';
 import multer from '@koa/multer';
 import { Service } from 'typedi';
 import axios, { AxiosPromise } from 'axios';
-import sharp, { Sharp } from 'sharp';
+import sharp, { ResizeOptions, Sharp } from 'sharp';
 import BaseRouter from '../../common/setup/BaseRouter';
 import { schemaToObject } from '../../infra/middlewares/createApiDocumentation';
 import { replaceVariables } from '../../common/utils/format';
@@ -76,6 +76,8 @@ const OperationSchema = (op: Operation) => {
         height: Joi.number(),
         fit: Joi.string().valid(...Object.keys(sharp.fit)),
         kernel: Joi.string().valid(...Object.keys(sharp.kernel)),
+        maxWidth: Joi.number(),
+        maxHeight: Joi.number(),
       });
       break;
     }
@@ -165,9 +167,9 @@ export class ImageProcessingRouter extends BaseRouter {
               const uploadMethod =
                 typeof output === 'string' ? 'PUT' : output.method;
 
-              const processor = this.createProcessor(pipeline, sharp(data))[
-                format
-              ]();
+              const processor = (
+                await this.createProcessor(pipeline, sharp(data))
+              )[format]();
               const outputBuffer = await processor.toBuffer();
 
               const outputVariables = {
@@ -261,9 +263,9 @@ export class ImageProcessingRouter extends BaseRouter {
           );
           if (error) throw Boom.badRequest(`invalid pipeline: ${error}`);
 
-          const processor = this.createProcessor(procDef, sharp(buffer))[
-            format
-          ]();
+          const processor = (
+            await this.createProcessor(procDef, sharp(buffer))
+          )[format]();
 
           ctx.body = await processor.toBuffer();
           ctx.status = 200;
@@ -272,13 +274,43 @@ export class ImageProcessingRouter extends BaseRouter {
     });
   }
 
-  private createProcessor(
+  private async createProcessor(
     pipeline: { op: Operation; args: any }[],
     base: Sharp = sharp()
-  ): Sharp {
+  ): Promise<Sharp> {
     let proc = base;
     for (const { op, args } of pipeline) {
-      proc = proc[op](args);
+      if (op === 'resize') {
+        const metadata = await proc.metadata();
+        const { width = 0, height = 0 } = metadata;
+
+        const aspect = width / height;
+        const keepAspect = args.fit === 'contain';
+
+        const resizedWidth = args.maxWidth
+          ? Math.min(args.maxWidth, width)
+          : args.width;
+        const resizedHeight = args.maxHeight
+          ? Math.min(args.maxHeight, height)
+          : args.height;
+
+        const resizeOptions: ResizeOptions = {
+          background: { r: 255, g: 255, b: 255, alpha: 1 },
+          ...args,
+          width:
+            keepAspect && width < height
+              ? Math.round(aspect * resizedHeight)
+              : Math.round(resizedWidth),
+          height:
+            keepAspect && height < width
+              ? Math.round(resizedWidth / aspect)
+              : Math.round(resizedHeight),
+        };
+
+        proc = proc.resize(resizeOptions);
+      } else {
+        proc = proc[op](args);
+      }
     }
     return proc;
   }
