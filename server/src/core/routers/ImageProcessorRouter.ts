@@ -74,6 +74,7 @@ const OperationSchema = (op: Operation) => {
       argsSchema = Joi.object({
         width: Joi.number(),
         height: Joi.number(),
+        fit: Joi.string().valid(...Object.keys(sharp.fit)),
         kernel: Joi.string().valid(...Object.keys(sharp.kernel)),
       });
       break;
