@@ -35,7 +35,41 @@ Or alternatively refer directly to the imaginary implementation located on your 
 
 ### Imaginary API
 
-TODO: Add description.
+Automatically generated API description is available at [https://taito-imaginary-dev.taitodev.com/docs]().
+
+Example
+```json
+{
+	"pipeline": [
+		{
+			"op": "resize",
+			"args": {
+				"width": 1024,
+				"height": 1024,
+				"kernel": "nearest",
+				"fit": "contain"
+			}
+		}
+	],
+	"urls": [
+		{
+			"input": "https://cdn.pixabay.com/photo/2013/07/12/17/47/test-pattern-152459_960_720.png",
+			"output": {
+				"url": "https://webhook.site/22ef5a04-f61d-4b37-85e6-0806fc6e3548",
+				"method": "PUT",
+				"headers": {
+					"Content-Length": "{{OUTPUT_LENGTH}}"
+				}
+			}
+		}
+	]
+}
+```
+
+This will download the image from the input url (`"https://cdn.pixabay.com/photo/2013/07/12/17/47/test-pattern-152459_960_720.png"`), resize it, and
+upload the result to the specified output url (`"https://webhook.site/22ef5a04-f61d-4b37-85e6-0806fc6e3548"`).
+
+In this example, the `Content-Length` -header is populated with the size of the output image.
 
 ## Release
 
